@@ -1,0 +1,11 @@
+olist_project:
+  outputs:
+    dev:
+      type: clickhouse
+      host: clickhouse
+      port: 8123
+      user: default
+      password: ""
+      database: olist
+      secure: False
+  target: dev

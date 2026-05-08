@@ -1,0 +1,76 @@
+services:
+  # --- Storage Layer ---
+  minio:
+    image: minio/minio:latest
+    container_name: olist_minio
+    ports:
+      - "9002:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: olistpassword123
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - olist_network
+
+  # --- Database Layer (OLAP) ---
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: olist_clickhouse
+    ports:
+      - "8123:8123"
+      - "9003:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    networks:
+      - olist_network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- Presentation Layer ---
+  metabase:
+    image: metabase/metabase:latest
+    container_name: olist_metabase
+    ports:
+      - "3000:3000"
+    environment:
+      MB_DB_TYPE: h2
+    volumes:
+      - metabase_data:/metabase-data
+    networks:
+      - olist_network
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
+  # --- Processing Layer ---
+  dbt:
+    build:
+      context: .
+      dockerfile: dbt.Dockerfile
+    container_name: olist_dbt
+    volumes:
+      - .:/usr/app
+      - ~/.dbt:/root/.dbt
+    environment:
+      DBT_PROFILES_DIR: /usr/app
+    networks:
+      - olist_network
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    entrypoint: ["tail", "-f", "/dev/null"] # Mantém o container vivo para execuções manuais
+
+networks:
+  olist_network:
+    driver: bridge
+
+volumes:
+  minio_data:
+  clickhouse_data:
+  metabase_data:
